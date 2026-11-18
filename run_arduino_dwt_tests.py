@@ -11,8 +11,8 @@ import time
 from pathlib import Path
 
 
-ROOT = Path("/Users/jamiekelly/nextgen-crypto-coursework")
-ASCON = ROOT / "ascon-c"
+ROOT = Path(os.environ.get("ASCON_ARDUINO_ROOT", str(Path(__file__).resolve().parent)))
+ASCON = Path(os.environ.get("ASCON_ARDUINO_ASCON_DIR", str(ROOT / "ascon-c")))
 RUN = Path(os.environ.get("ASCON_ARDUINO_RUN_DIR", str(ROOT / "arduino_dwt_board_run_20260502")))
 PORT = os.environ.get("ASCON_ARDUINO_PORT", "/dev/cu.usbmodem2101")
 FQBN = os.environ.get("ASCON_ARDUINO_FQBN", "arduino:mbed_nano:nano33ble")
@@ -29,7 +29,7 @@ MAX_LEN = max(MESSAGE_LENGTHS)
 SIZE_TOOL = Path(
     os.environ.get(
         "ASCON_ARDUINO_SIZE_TOOL",
-        "/Users/jamiekelly/Library/Arduino15/packages/arduino/tools/"
+        str(Path.home()) + "/Library/Arduino15/packages/arduino/tools/"
         "arm-none-eabi-gcc/7-2017q4/bin/arm-none-eabi-size",
     )
 )

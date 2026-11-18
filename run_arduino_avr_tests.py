@@ -11,8 +11,8 @@ import time
 from pathlib import Path
 
 
-ROOT = Path("/Users/jamiekelly/nextgen-crypto-coursework")
-ASCON = ROOT / "ascon-c"
+ROOT = Path(os.environ.get("ASCON_AVR_ROOT", str(Path(__file__).resolve().parent)))
+ASCON = Path(os.environ.get("ASCON_AVR_ASCON_DIR", str(ROOT / "ascon-c")))
 RUN = Path(os.environ.get("ASCON_AVR_RUN_DIR", str(ROOT / "arduino_mega2560_avr_board_run_20260503")))
 PORT = os.environ.get("ASCON_AVR_PORT", "/dev/cu.usbmodem2101")
 FQBN = os.environ.get("ASCON_AVR_FQBN", "arduino:avr:mega")
@@ -28,7 +28,7 @@ MAX_LEN = max(MESSAGE_LENGTHS)
 SIZE_TOOL = Path(
     os.environ.get(
         "ASCON_AVR_SIZE_TOOL",
-        "/Users/jamiekelly/Library/Arduino15/packages/arduino/tools/"
+        str(Path.home()) + "/Library/Arduino15/packages/arduino/tools/"
         "avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/avr-size",
     )
 )
