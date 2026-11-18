@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use these benchmarks, please cite the LightSec 2026 paper they support."
+title: "Ascon coursework: benchmarks and rejection tests"
+authors:
+  - family-names: Kelly
+    given-names: Jamie
+repository-code: "https://github.com/RJamieKelly/ascon_coursework_priv"
+preferred-citation:
+  type: conference-paper
+  title: "Primitive-Specific Admission for Lightweight-Crypto Benchmarks: Three Failure Modes"
+  authors:
+    - family-names: Kelly
+      given-names: Jamie
+  conference:
+    name: "7th International Workshop on Lightweight Cryptography for Security & Privacy (LightSec 2026)"
+    city: Antalya
+    country: TR
+    date-start: 2026-10-11
+    date-end: 2026-10-11
+  collection-title: "Lightweight Cryptography for Security and Privacy (LightSec 2026)"
+  collection-type: proceedings
+  publisher:
+    name: Springer
+  notes: "Lecture Notes in Computer Science, to appear."
+  year: 2026
