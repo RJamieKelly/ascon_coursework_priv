@@ -1,0 +1,5 @@
+build/
+results/
+ascon-c/
+__MACOSX/
+.DS_Store

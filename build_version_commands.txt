@@ -42,7 +42,7 @@ Example for Ascon-AEAD128 opt64:
     -Iascon-c/crypto_aead/asconaead128/opt64 \
     -Iascon-c/tests \
     ascon-c/crypto_aead/asconaead128/opt64/*.c \
-    bench_time_aead.c \
+    benchmark_harness_aead.c \
     -o bench_aead_opt64
 
   ./bench_aead_opt64 > results/aead_opt64.csv
@@ -54,7 +54,7 @@ Example for Ascon-Hash256 opt64:
     -Iascon-c/crypto_hash/asconhash256/opt64 \
     -Iascon-c/tests \
     ascon-c/crypto_hash/asconhash256/opt64/*.c \
-    bench_time_hash.c \
+    benchmark_harness_hash.c \
     -o bench_hash_opt64
 
   ./bench_hash_opt64 > results/hash_opt64.csv
