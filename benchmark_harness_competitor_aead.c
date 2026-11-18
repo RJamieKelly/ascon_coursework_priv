@@ -56,87 +56,97 @@ static void set_nonce_counter(unsigned long long counter) {
   }
 }
 
-static int encrypt_once(const EVP_CIPHER *cipher, unsigned long long mlen,
-                        unsigned long long adlen) {
+/* One context per direction, set up for the cipher once, outside the timed
+ * loop. Each operation still loads the key and nonce, so key setup stays in
+ * the measurement, matching crypto_aead_encrypt/decrypt, which take the key on
+ * every call. Only the malloc/free and cipher lookup move out. */
+static EVP_CIPHER_CTX *new_ctx(const EVP_CIPHER *cipher, int enc) {
   EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
-  int outlen = 0;
-  int tmplen = 0;
-  int ok = 0;
-
-  if (ctx == NULL) goto out;
-  if (EVP_EncryptInit_ex(ctx, cipher, NULL, NULL, NULL) != 1) goto out;
-  if (EVP_CIPHER_get_nid(cipher) == EVP_CIPHER_nid(EVP_aes_128_gcm())) {
-    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, NONCE_LEN, NULL) != 1)
-      goto out;
+  if (ctx == NULL) return NULL;
+  if (EVP_CipherInit_ex(ctx, cipher, NULL, NULL, NULL, enc) != 1 ||
+      EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_IVLEN, NONCE_LEN, NULL) != 1) {
+    EVP_CIPHER_CTX_free(ctx);
+    return NULL;
   }
-  if (EVP_EncryptInit_ex(ctx, NULL, NULL, key, nonce) != 1) goto out;
-  if (adlen > 0 &&
-      EVP_EncryptUpdate(ctx, NULL, &outlen, ad, (int)adlen) != 1)
-    goto out;
-  if (EVP_EncryptUpdate(ctx, ct, &outlen, msg, (int)mlen) != 1) goto out;
-  if (EVP_EncryptFinal_ex(ctx, ct + outlen, &tmplen) != 1) goto out;
-  if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, TAG_LEN, tag) != 1)
-    goto out;
-  ok = 1;
-
-out:
-  EVP_CIPHER_CTX_free(ctx);
-  return ok;
+  return ctx;
 }
 
-static int decrypt_once(const EVP_CIPHER *cipher, unsigned long long mlen,
+static int encrypt_once(EVP_CIPHER_CTX *ctx, unsigned long long mlen,
                         unsigned long long adlen) {
-  EVP_CIPHER_CTX *ctx = EVP_CIPHER_CTX_new();
   int outlen = 0;
   int tmplen = 0;
-  int ok = 0;
 
-  if (ctx == NULL) goto out;
-  if (EVP_DecryptInit_ex(ctx, cipher, NULL, NULL, NULL) != 1) goto out;
-  if (EVP_CIPHER_get_nid(cipher) == EVP_CIPHER_nid(EVP_aes_128_gcm())) {
-    if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_IVLEN, NONCE_LEN, NULL) != 1)
-      goto out;
-  }
-  if (EVP_DecryptInit_ex(ctx, NULL, NULL, key, nonce) != 1) goto out;
+  if (EVP_EncryptInit_ex(ctx, NULL, NULL, key, nonce) != 1) return 0;
+  if (adlen > 0 &&
+      EVP_EncryptUpdate(ctx, NULL, &outlen, ad, (int)adlen) != 1)
+    return 0;
+  if (EVP_EncryptUpdate(ctx, ct, &outlen, msg, (int)mlen) != 1) return 0;
+  if (EVP_EncryptFinal_ex(ctx, ct + outlen, &tmplen) != 1) return 0;
+  if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, TAG_LEN, tag) != 1)
+    return 0;
+  return 1;
+}
+
+static int decrypt_once(EVP_CIPHER_CTX *ctx, unsigned long long mlen,
+                        unsigned long long adlen) {
+  int outlen = 0;
+  int tmplen = 0;
+
+  if (EVP_DecryptInit_ex(ctx, NULL, NULL, key, nonce) != 1) return 0;
   if (adlen > 0 &&
       EVP_DecryptUpdate(ctx, NULL, &outlen, ad, (int)adlen) != 1)
-    goto out;
-  if (EVP_DecryptUpdate(ctx, dec, &outlen, ct, (int)mlen) != 1) goto out;
+    return 0;
+  if (EVP_DecryptUpdate(ctx, dec, &outlen, ct, (int)mlen) != 1) return 0;
   if (EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, TAG_LEN, tag) != 1)
-    goto out;
-  if (EVP_DecryptFinal_ex(ctx, dec + outlen, &tmplen) != 1) goto out;
-  if (memcmp(dec, msg, mlen) != 0) goto out;
-  ok = 1;
-
-out:
-  EVP_CIPHER_CTX_free(ctx);
-  return ok;
+    return 0;
+  if (EVP_DecryptFinal_ex(ctx, dec + outlen, &tmplen) != 1) return 0;
+  return 1;
 }
 
 static double time_encrypt(const EVP_CIPHER *cipher, unsigned long long mlen,
                            unsigned long long adlen,
                            unsigned long long reps) {
+  EVP_CIPHER_CTX *ctx = new_ctx(cipher, 1);
+  if (ctx == NULL) return -1.0;
+
   uint64_t start = now_ns();
   for (unsigned long long i = 0; i < reps; ++i) {
     set_nonce_counter(i);
-    if (!encrypt_once(cipher, mlen, adlen)) return -1.0;
+    if (!encrypt_once(ctx, mlen, adlen)) {
+      EVP_CIPHER_CTX_free(ctx);
+      return -1.0;
+    }
   }
   uint64_t stop = now_ns();
+  EVP_CIPHER_CTX_free(ctx);
   return (double)(stop - start) / (double)(mlen * reps);
 }
 
 static double time_decrypt(const EVP_CIPHER *cipher, unsigned long long mlen,
                            unsigned long long adlen,
                            unsigned long long reps) {
+  EVP_CIPHER_CTX *ectx = new_ctx(cipher, 1);
+  EVP_CIPHER_CTX *dctx = new_ctx(cipher, 0);
+  double result = -1.0;
+  if (ectx == NULL || dctx == NULL) goto out;
+
   nonce[0] = 0xa0u;
-  if (!encrypt_once(cipher, mlen, adlen)) return -1.0;
+  if (!encrypt_once(ectx, mlen, adlen)) goto out;
 
   uint64_t start = now_ns();
   for (unsigned long long i = 0; i < reps; ++i) {
-    if (!decrypt_once(cipher, mlen, adlen)) return -1.0;
+    if (!decrypt_once(dctx, mlen, adlen)) goto out;
   }
   uint64_t stop = now_ns();
-  return (double)(stop - start) / (double)(mlen * reps);
+
+  /* Check the plaintext once, after timing, as the Ascon harness does. */
+  if (memcmp(dec, msg, mlen) != 0) goto out;
+  result = (double)(stop - start) / (double)(mlen * reps);
+
+out:
+  EVP_CIPHER_CTX_free(ectx);
+  EVP_CIPHER_CTX_free(dctx);
+  return result;
 }
 
 static void run_algorithm(const char *name, const EVP_CIPHER *cipher) {
